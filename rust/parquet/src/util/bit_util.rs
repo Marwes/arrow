@@ -76,9 +76,7 @@ pub fn convert_to_bytes<T>(val: &T, num_bytes: usize) -> Vec<u8> {
 #[inline]
 pub fn memcpy(source: &[u8], target: &mut [u8]) {
     assert!(target.len() >= source.len());
-    unsafe {
-        std::ptr::copy_nonoverlapping(source.as_ptr(), target.as_mut_ptr(), source.len())
-    }
+    target[..source.len()].copy_from_slice(source)
 }
 
 #[inline]
