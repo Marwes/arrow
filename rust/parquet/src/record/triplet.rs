@@ -16,7 +16,9 @@
 // under the License.
 
 use crate::basic::Type as PhysicalType;
-use crate::column::reader::{get_typed_column_reader, ColumnReader, ColumnReaderImpl};
+use crate::column::reader::{
+    get_typed_column_reader, ColumnReader, ColumnReaderImpl, GetColumnReader,
+};
 use crate::data_type::*;
 use crate::errors::{ParquetError, Result};
 use crate::record::api::Field;
@@ -194,7 +196,10 @@ pub struct TypedTripletIter<T: DataType> {
 impl<T: DataType> TypedTripletIter<T> {
     /// Creates new typed triplet iterator based on provided column reader.
     /// Use batch size to specify the amount of values to buffer from column reader.
-    fn new(descr: ColumnDescPtr, batch_size: usize, column_reader: ColumnReader) -> Self {
+    fn new(descr: ColumnDescPtr, batch_size: usize, column_reader: ColumnReader) -> Self
+    where
+        T: GetColumnReader,
+    {
         assert!(
             batch_size > 0,
             "Expected positive batch size, found: {}",

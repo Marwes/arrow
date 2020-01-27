@@ -47,6 +47,66 @@ pub enum ColumnWriter {
     FixedLenByteArrayColumnWriter(ColumnWriterImpl<FixedLenByteArrayType>),
 }
 
+pub trait GetColumnWriter: DataType {
+    fn get_column_writer(column_writer: ColumnWriter) -> Option<ColumnWriterImpl<Self>>
+    where
+        Self: Sized;
+
+    fn get_column_writer_ref(
+        column_writer: &ColumnWriter,
+    ) -> Option<&ColumnWriterImpl<Self>>
+    where
+        Self: Sized;
+
+    fn get_column_writer_mut(
+        column_writer: &mut ColumnWriter,
+    ) -> Option<&mut ColumnWriterImpl<Self>>
+    where
+        Self: Sized;
+}
+
+macro_rules! gen_get_column_writer {
+    ($writer_ident: ident $ty: ty) => {
+        impl GetColumnWriter for $ty {
+            fn get_column_writer(
+                column_writer: ColumnWriter,
+            ) -> Option<ColumnWriterImpl<Self>> {
+                match column_writer {
+                    ColumnWriter::$writer_ident(w) => Some(w),
+                    _ => None,
+                }
+            }
+
+            fn get_column_writer_ref(
+                column_writer: &ColumnWriter,
+            ) -> Option<&ColumnWriterImpl<Self>> {
+                match column_writer {
+                    ColumnWriter::$writer_ident(w) => Some(w),
+                    _ => None,
+                }
+            }
+
+            fn get_column_writer_mut(
+                column_writer: &mut ColumnWriter,
+            ) -> Option<&mut ColumnWriterImpl<Self>> {
+                match column_writer {
+                    ColumnWriter::$writer_ident(w) => Some(w),
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+gen_get_column_writer! {BoolColumnWriter BoolType}
+gen_get_column_writer! {Int32ColumnWriter Int32Type}
+gen_get_column_writer! {Int64ColumnWriter Int64Type}
+gen_get_column_writer! {Int96ColumnWriter Int96Type}
+gen_get_column_writer! {FloatColumnWriter FloatType}
+gen_get_column_writer! {DoubleColumnWriter DoubleType}
+gen_get_column_writer! {FixedLenByteArrayColumnWriter FixedLenByteArrayType}
+gen_get_column_writer! {ByteArrayColumnWriter ByteArrayType}
+
 /// Gets a specific column writer corresponding to column descriptor `descr`.
 pub fn get_column_writer(
     descr: ColumnDescPtr,
@@ -99,21 +159,21 @@ pub fn get_column_writer(
 /// non-generic type to a generic column writer type `ColumnWriterImpl`.
 ///
 /// Panics if actual enum value for `col_writer` does not match the type `T`.
-pub fn get_typed_column_writer<T: DataType>(
+pub fn get_typed_column_writer<T: GetColumnWriter>(
     col_writer: ColumnWriter,
 ) -> ColumnWriterImpl<T> {
     T::get_column_writer(col_writer).expect("Column type mismatch")
 }
 
 /// Similar to `get_typed_column_writer` but returns a reference.
-pub fn get_typed_column_writer_ref<T: DataType>(
+pub fn get_typed_column_writer_ref<T: GetColumnWriter>(
     col_writer: &ColumnWriter,
 ) -> &ColumnWriterImpl<T> {
     T::get_column_writer_ref(col_writer).expect("Column type mismatch")
 }
 
 /// Similar to `get_typed_column_writer` but returns a reference.
-pub fn get_typed_column_writer_mut<T: DataType>(
+pub fn get_typed_column_writer_mut<T: GetColumnWriter>(
     col_writer: &mut ColumnWriter,
 ) -> &mut ColumnWriterImpl<T> {
     T::get_column_writer_mut(col_writer).expect("Column type mismatch")
@@ -837,7 +897,9 @@ mod tests {
 
     use crate::column::{
         page::PageReader,
-        reader::{get_column_reader, get_typed_column_reader, ColumnReaderImpl},
+        reader::{
+            get_column_reader, get_typed_column_reader, ColumnReaderImpl, GetColumnReader,
+        },
     };
     use crate::file::{
         properties::WriterProperties, reader::SerializedPageReader,
@@ -1440,7 +1502,7 @@ mod tests {
     /// Performs write-read roundtrip with randomly generated values and levels.
     /// `max_size` is maximum number of values or levels (if `max_def_level` > 0) to write
     /// for a column.
-    fn column_roundtrip_random<'a, T: DataType>(
+    fn column_roundtrip_random<'a, T: GetColumnWriter + GetColumnReader>(
         file_name: &'a str,
         props: WriterProperties,
         max_size: usize,
@@ -1482,7 +1544,7 @@ mod tests {
     }
 
     /// Performs write-read roundtrip and asserts written values and levels.
-    fn column_roundtrip<'a, T: DataType>(
+    fn column_roundtrip<'a, T: GetColumnReader + GetColumnWriter>(
         file_name: &'a str,
         props: WriterProperties,
         values: &[T::T],
@@ -1584,7 +1646,7 @@ mod tests {
 
     /// Performs write of provided values and returns column metadata of those values.
     /// Used to test encoding support for column writer.
-    fn column_write_and_get_metadata<T: DataType>(
+    fn column_write_and_get_metadata<T: GetColumnWriter>(
         props: WriterProperties,
         values: &[T::T],
     ) -> ColumnChunkMetaData {
@@ -1599,7 +1661,7 @@ mod tests {
     // Function to use in tests for EncodingWriteSupport. This checks that dictionary
     // offset and encodings to make sure that column writer uses provided by trait
     // encodings.
-    fn check_encoding_write_support<T: DataType>(
+    fn check_encoding_write_support<T: GetColumnWriter>(
         version: WriterVersion,
         dict_enabled: bool,
         data: &[T::T],
@@ -1638,7 +1700,7 @@ mod tests {
     }
 
     /// Returns column writer.
-    fn get_test_column_writer<T: DataType>(
+    fn get_test_column_writer<T: GetColumnWriter>(
         page_writer: Box<PageWriter>,
         max_def_level: i16,
         max_rep_level: i16,
@@ -1650,7 +1712,7 @@ mod tests {
     }
 
     /// Returns column reader.
-    fn get_test_column_reader<T: DataType>(
+    fn get_test_column_reader<T: GetColumnReader>(
         page_reader: Box<PageReader>,
         max_def_level: i16,
         max_rep_level: i16,

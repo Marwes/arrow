@@ -45,6 +45,35 @@ pub enum ColumnReader {
     FixedLenByteArrayColumnReader(ColumnReaderImpl<FixedLenByteArrayType>),
 }
 
+pub trait GetColumnReader: DataType {
+    fn get_column_reader(column_writer: ColumnReader) -> Option<ColumnReaderImpl<Self>>
+    where
+        Self: Sized;
+}
+
+macro_rules! gen_get_column_reader {
+    ($reader_ident: ident $ty: ty) => {
+        impl GetColumnReader for $ty {
+            fn get_column_reader(
+                column_writer: ColumnReader,
+            ) -> Option<ColumnReaderImpl<Self>> {
+                match column_writer {
+                    ColumnReader::$reader_ident(w) => Some(w),
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+gen_get_column_reader! {BoolColumnReader BoolType}
+gen_get_column_reader! {Int32ColumnReader Int32Type}
+gen_get_column_reader! {Int64ColumnReader Int64Type}
+gen_get_column_reader! {Int96ColumnReader Int96Type}
+gen_get_column_reader! {FloatColumnReader FloatType}
+gen_get_column_reader! {DoubleColumnReader DoubleType}
+gen_get_column_reader! {FixedLenByteArrayColumnReader FixedLenByteArrayType}
+gen_get_column_reader! {ByteArrayColumnReader ByteArrayType}
+
 /// Gets a specific column reader corresponding to column descriptor `col_descr`. The
 /// column reader will read from pages in `col_page_reader`.
 pub fn get_column_reader(
@@ -90,7 +119,7 @@ pub fn get_column_reader(
 /// non-generic type to a generic column reader type `ColumnReaderImpl`.
 ///
 /// Panics if actual enum value for `col_reader` does not match the type `T`.
-pub fn get_typed_column_reader<T: DataType>(
+pub fn get_typed_column_reader<T: GetColumnReader>(
     col_reader: ColumnReader,
 ) -> ColumnReaderImpl<T> {
     T::get_column_reader(col_reader).expect("Column type mismatch")
@@ -1104,7 +1133,7 @@ mod tests {
         values: Vec<T::T>,
     }
 
-    impl<T: DataType> ColumnReaderTester<T>
+    impl<T: GetColumnReader> ColumnReaderTester<T>
     where
         T::T: PartialOrd + SampleRange + Copy,
     {
