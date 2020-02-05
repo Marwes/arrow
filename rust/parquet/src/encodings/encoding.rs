@@ -70,37 +70,33 @@ pub trait Encoder<T: DataType> {
     fn flush_buffer(&mut self) -> Result<ByteBufferPtr>;
 }
 
-trait CreateEncoder: DataType + Sized {
+pub trait CreateEncoder: DataType + Sized {
     fn new_plain_encoder(
-        _desc: ColumnDescPtr,
-        _mem_tracker: MemTrackerPtr,
-        _vec: Vec<u8>,
-    ) -> Result<PlainEncoder<Self>> {
-        Err(nyi_err!(
-            "PLAIN encoding is not supported for {}",
-            Self::get_physical_type()
-        ))
+        desc: ColumnDescPtr,
+        mem_tracker: MemTrackerPtr,
+        vec: Vec<u8>,
+    ) -> Result<Box<dyn Encoder<Self>>> {
+        Ok(Box::new(PlainEncoder::new(desc, mem_tracker, vec)))
     }
-    fn new_rle_dictionary_encoder() -> Result<RleValueEncoder<Self>> {
+    fn new_rle_dictionary_encoder() -> Result<Box<dyn Encoder<Self>>> {
         Err(nyi_err!(
             "RLE_DICTIONARY encoding is not supported for {}",
             Self::get_physical_type()
         ))
     }
-    fn new_delta_binary_packed_encoder() -> Result<DeltaBitPackEncoder<Self>> {
+    fn new_delta_binary_packed_encoder() -> Result<Box<dyn Encoder<Self>>> {
         Err(nyi_err!(
             "DELTA_BINARY_PACKED encoding is not supported for {}",
             Self::get_physical_type()
         ))
     }
-    fn new_delta_length_byte_array_encoder() -> Result<DeltaLengthByteArrayEncoder<Self>>
-    {
+    fn new_delta_length_byte_array_encoder() -> Result<Box<dyn Encoder<Self>>> {
         Err(nyi_err!(
             "DELTA_LENGTH_BYTE_ARRAY encoding is not supported for {}",
             Self::get_physical_type()
         ))
     }
-    fn new_delta_byte_array_encoder() -> Result<DeltaByteArrayEncoder<Self>> {
+    fn new_delta_byte_array_encoder() -> Result<Box<dyn Encoder<Self>>> {
         Err(nyi_err!(
             "DELTA_BYTE_ARRAY encoding is not supported for {}",
             Self::get_physical_type()
@@ -108,7 +104,47 @@ trait CreateEncoder: DataType + Sized {
     }
 }
 
-impl CreateEncoder for FixedLenByteArrayType {}
+impl CreateEncoder for BoolType {
+    fn new_rle_dictionary_encoder() -> Result<Box<dyn Encoder<Self>>> {
+        Ok(Box::new(RleValueEncoder::new()))
+    }
+}
+
+impl CreateEncoder for Int32Type {
+    fn new_delta_binary_packed_encoder() -> Result<Box<dyn Encoder<Self>>> {
+        Ok(Box::new(DeltaBitPackEncoder::new()))
+    }
+}
+
+impl CreateEncoder for Int64Type {
+    fn new_delta_binary_packed_encoder() -> Result<Box<dyn Encoder<Self>>> {
+        Ok(Box::new(DeltaBitPackEncoder::new()))
+    }
+}
+
+impl CreateEncoder for Int96Type {}
+impl CreateEncoder for FloatType {}
+impl CreateEncoder for DoubleType {}
+
+impl CreateEncoder for ByteArrayType {
+    fn new_delta_length_byte_array_encoder() -> Result<Box<dyn Encoder<Self>>> {
+        Ok(Box::new(DeltaLengthByteArrayEncoder::new()))
+    }
+
+    fn new_delta_byte_array_encoder() -> Result<Box<dyn Encoder<Self>>> {
+        Ok(Box::new(DeltaByteArrayEncoder::new()))
+    }
+}
+
+impl CreateEncoder for FixedLenByteArrayType {
+    fn new_delta_length_byte_array_encoder() -> Result<Box<dyn Encoder<Self>>> {
+        Ok(Box::new(DeltaLengthByteArrayEncoder::new()))
+    }
+
+    fn new_delta_byte_array_encoder() -> Result<Box<dyn Encoder<Self>>> {
+        Ok(Box::new(DeltaByteArrayEncoder::new()))
+    }
+}
 
 /// Gets a encoder for the particular data type `T` and encoding `encoding`. Memory usage
 /// for the encoder instance is tracked by `mem_tracker`.
@@ -118,18 +154,16 @@ pub fn get_encoder<T: CreateEncoder>(
     mem_tracker: MemTrackerPtr,
 ) -> Result<Box<Encoder<T>>> {
     let encoder: Box<Encoder<T>> = match encoding {
-        Encoding::PLAIN => Box::new(T::new_plain_encoder(desc, mem_tracker, vec![])),
+        Encoding::PLAIN => T::new_plain_encoder(desc, mem_tracker, vec![])?,
         Encoding::RLE_DICTIONARY | Encoding::PLAIN_DICTIONARY => {
             return Err(general_err!(
                 "Cannot initialize this encoding through this function"
             ));
         }
-        Encoding::RLE => Box::new(T::new_rle_dictionary_encoder()),
-        Encoding::DELTA_BINARY_PACKED => Box::new(T::new_delta_binary_packed_encoder()),
-        Encoding::DELTA_LENGTH_BYTE_ARRAY => {
-            Box::new(T::new_delta_length_byte_array_encoder())
-        }
-        Encoding::DELTA_BYTE_ARRAY => Box::new(T::new_delta_byte_array_encoder()),
+        Encoding::RLE => T::new_rle_dictionary_encoder()?,
+        Encoding::DELTA_BINARY_PACKED => T::new_delta_binary_packed_encoder()?,
+        Encoding::DELTA_LENGTH_BYTE_ARRAY => T::new_delta_length_byte_array_encoder()?,
+        Encoding::DELTA_BYTE_ARRAY => T::new_delta_byte_array_encoder()?,
         e => return Err(nyi_err!("Encoding {} is not supported", e)),
     };
     Ok(encoder)
@@ -882,7 +916,7 @@ pub struct DeltaLengthByteArrayEncoder<T: DataType> {
     // length encoder
     len_encoder: DeltaBitPackEncoder<Int32Type>,
     // byte array data
-    data: Vec<ByteArray>,
+    data: Vec<T::T>,
     // data size in bytes of encoded values
     encoded_size: usize,
     _phantom: PhantomData<T>,
@@ -902,7 +936,10 @@ impl<T: DataType> DeltaLengthByteArrayEncoder<T> {
 
 impl<T: DataType> Encoder<T> for DeltaLengthByteArrayEncoder<T> {
     default fn put(&mut self, _values: &[T::T]) -> Result<()> {
-        panic!("DeltaLengthByteArrayEncoder only supports ByteArrayType");
+        panic!(
+            "DeltaLengthByteArrayEncoder only supports ByteArrayType and FixedLenByteArrayType, got: {}",
+            T::get_physical_type()
+        );
     }
 
     fn encoding(&self) -> Encoding {
@@ -914,12 +951,18 @@ impl<T: DataType> Encoder<T> for DeltaLengthByteArrayEncoder<T> {
     }
 
     default fn flush_buffer(&mut self) -> Result<ByteBufferPtr> {
-        panic!("DeltaLengthByteArrayEncoder only supports ByteArrayType");
+        panic!(
+            "DeltaLengthByteArrayEncoder only supports ByteArrayType and FixedLenByteArrayType, got: {}",
+            T::get_physical_type()
+        );
     }
 }
 
-impl Encoder<ByteArrayType> for DeltaLengthByteArrayEncoder<ByteArrayType> {
-    fn put(&mut self, values: &[ByteArray]) -> Result<()> {
+impl<T: DataType> Encoder<T> for DeltaLengthByteArrayEncoder<T>
+where
+    T::T: ByteArrayLike,
+{
+    fn put(&mut self, values: &[T::T]) -> Result<()> {
         let lengths: Vec<i32> = values
             .iter()
             .map(|byte_array| byte_array.len() as i32)
@@ -969,10 +1012,23 @@ impl<T: DataType> DeltaByteArrayEncoder<T> {
     }
 }
 
-trait ByteArrayLike {
+#[doc(hidden)]
+pub trait ByteArrayLike {
     fn len(&self) -> usize;
     fn data(&self) -> &[u8];
     fn slice(&self, start: usize, len: usize) -> Self;
+}
+
+impl ByteArrayLike for ByteArray {
+    fn len(&self) -> usize {
+        ByteArray::len(self)
+    }
+    fn data(&self) -> &[u8] {
+        ByteArray::data(self)
+    }
+    fn slice(&self, start: usize, len: usize) -> Self {
+        ByteArray::slice(self, start, len)
+    }
 }
 
 impl ByteArrayLike for ByteBuffer {
@@ -1063,8 +1119,6 @@ mod tests {
         // supported encodings
         create_and_check_encoder::<Int32Type>(Encoding::PLAIN, None);
         create_and_check_encoder::<Int32Type>(Encoding::DELTA_BINARY_PACKED, None);
-        create_and_check_encoder::<Int32Type>(Encoding::DELTA_LENGTH_BYTE_ARRAY, None);
-        create_and_check_encoder::<Int32Type>(Encoding::DELTA_BYTE_ARRAY, None);
         create_and_check_encoder::<BoolType>(Encoding::RLE, None);
 
         // error when initializing
@@ -1184,7 +1238,7 @@ mod tests {
 
     #[test]
     fn test_estimated_data_encoded_size() {
-        fn run_test<T: DataType>(
+        fn run_test<T: CreateEncoder>(
             encoding: Encoding,
             type_length: i32,
             values: &[T::T],
@@ -1304,7 +1358,7 @@ mod tests {
         fn test_dict_internal(total: usize, type_length: i32) -> Result<()>;
     }
 
-    impl<T: DataType> EncodingTester<T> for T {
+    impl<T: CreateEncoder> EncodingTester<T> for T {
         fn test_internal(enc: Encoding, total: usize, type_length: i32) -> Result<()> {
             let mut encoder = create_test_encoder::<T>(type_length, enc);
             let mut decoder = create_test_decoder::<T>(type_length, enc);
@@ -1404,7 +1458,7 @@ mod tests {
         decoder.get(output)
     }
 
-    fn create_and_check_encoder<T: DataType>(
+    fn create_and_check_encoder<T: CreateEncoder>(
         encoding: Encoding,
         err: Option<ParquetError>,
     ) {
@@ -1417,7 +1471,7 @@ mod tests {
                 assert_eq!(encoder.err().unwrap(), parquet_error);
             }
             None => {
-                assert!(encoder.is_ok());
+                assert!(encoder.is_ok(), "{}", encoder.err().unwrap());
                 assert_eq!(encoder.unwrap().encoding(), encoding);
             }
         }

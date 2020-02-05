@@ -506,6 +506,7 @@ mod tests {
 
     use crate::basic::Type as PhysicalType;
     use crate::column::page::Page;
+    use crate::encodings::encoding::CreateEncoder;
     use crate::schema::types::{ColumnDescriptor, ColumnPath, Type as SchemaType};
     use crate::util::test_common::make_pages;
 
@@ -1104,7 +1105,7 @@ mod tests {
         values: Vec<T::T>,
     }
 
-    impl<T: DataType> ColumnReaderTester<T>
+    impl<T: CreateEncoder> ColumnReaderTester<T>
     where
         T::T: PartialOrd + SampleRange + Copy,
     {

@@ -1367,11 +1367,11 @@ mod tests {
         test_delta_byte_array_decode(data);
     }
 
-    fn test_rle_value_decode<T: DataType>(data: Vec<Vec<T::T>>) {
+    fn test_rle_value_decode<T: CreateEncoder>(data: Vec<Vec<T::T>>) {
         test_encode_decode::<T>(data, Encoding::RLE);
     }
 
-    fn test_delta_bit_packed_decode<T: DataType>(data: Vec<Vec<T::T>>) {
+    fn test_delta_bit_packed_decode<T: CreateEncoder>(data: Vec<Vec<T::T>>) {
         test_encode_decode::<T>(data, Encoding::DELTA_BINARY_PACKED);
     }
 
@@ -1383,7 +1383,7 @@ mod tests {
     // For example,
     //   vec![vec![1, 2, 3]] invokes `put()` once and writes {1, 2, 3}
     //   vec![vec![1, 2], vec![3]] invokes `put()` twice and writes {1, 2, 3}
-    fn test_encode_decode<T: DataType>(data: Vec<Vec<T::T>>, encoding: Encoding) {
+    fn test_encode_decode<T: CreateEncoder>(data: Vec<Vec<T::T>>, encoding: Encoding) {
         // Type length should not really matter for encode/decode test,
         // otherwise change it based on type
         let col_descr = create_test_col_desc_ptr(-1, T::get_physical_type());

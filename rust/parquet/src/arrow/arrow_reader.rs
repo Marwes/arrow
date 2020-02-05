@@ -203,6 +203,7 @@ mod tests {
     use crate::arrow::converter::{Converter, FromConverter, Utf8ArrayConverter};
     use crate::column::writer::get_typed_column_writer_mut;
     use crate::data_type::{BoolType, ByteArray, ByteArrayType, DataType, Int32Type};
+    use crate::encodings::encoding::CreateEncoder;
     use crate::errors::Result;
     use crate::file::properties::WriterProperties;
     use crate::file::reader::{FileReader, SerializedFileReader};
@@ -310,7 +311,7 @@ mod tests {
         record_batch_size: usize,
         num_iterations: usize,
     ) where
-        T: DataType,
+        T: CreateEncoder,
         G: RandGen<T>,
         A: PartialEq + Array + 'static,
         C: Converter<Vec<Option<T::T>>, A> + 'static,
@@ -367,7 +368,7 @@ mod tests {
         }
     }
 
-    fn generate_single_column_file_with_data<T: DataType>(
+    fn generate_single_column_file_with_data<T: CreateEncoder>(
         values: &Vec<Vec<T::T>>,
         path: &Path,
         schema: TypePtr,

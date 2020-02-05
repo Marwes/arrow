@@ -18,8 +18,7 @@
 use crate::basic::Encoding;
 use crate::column::page::PageReader;
 use crate::column::page::{Page, PageIterator};
-use crate::data_type::DataType;
-use crate::encodings::encoding::{get_encoder, DictEncoder, Encoder};
+use crate::encodings::encoding::{get_encoder, CreateEncoder, DictEncoder, Encoder};
 use crate::encodings::levels::max_buffer_size;
 use crate::encodings::levels::LevelEncoder;
 use crate::errors::Result;
@@ -37,7 +36,7 @@ use std::vec::IntoIter;
 pub trait DataPageBuilder {
     fn add_rep_levels(&mut self, max_level: i16, rep_levels: &[i16]);
     fn add_def_levels(&mut self, max_level: i16, def_levels: &[i16]);
-    fn add_values<T: DataType>(&mut self, encoding: Encoding, values: &[T::T]);
+    fn add_values<T: CreateEncoder>(&mut self, encoding: Encoding, values: &[T::T]);
     fn add_indices(&mut self, indices: ByteBufferPtr);
     fn consume(self) -> Page;
 }
@@ -111,7 +110,7 @@ impl DataPageBuilder for DataPageBuilderImpl {
         self.def_levels_byte_len = self.add_levels(max_levels, def_levels);
     }
 
-    fn add_values<T: DataType>(&mut self, encoding: Encoding, values: &[T::T]) {
+    fn add_values<T: CreateEncoder>(&mut self, encoding: Encoding, values: &[T::T]) {
         assert!(
             self.num_values >= values.len() as u32,
             "num_values: {}, values.len(): {}",
@@ -226,7 +225,7 @@ impl PageIterator for InMemoryPageIterator {
     }
 }
 
-pub fn make_pages<T: DataType>(
+pub fn make_pages<T: CreateEncoder>(
     desc: ColumnDescPtr,
     encoding: Encoding,
     num_pages: usize,

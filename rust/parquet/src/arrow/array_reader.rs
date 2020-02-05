@@ -858,7 +858,8 @@ mod tests {
     };
     use crate::basic::Encoding;
     use crate::column::page::Page;
-    use crate::data_type::{DataType, Int32Type};
+    use crate::data_type::Int32Type;
+    use crate::encodings::encoding::CreateEncoder;
     use crate::errors::Result;
     use crate::file::reader::{FileReader, SerializedFileReader};
     use crate::schema::parser::parse_message_type;
@@ -873,7 +874,7 @@ mod tests {
     use std::rc::Rc;
     use std::sync::Arc;
 
-    fn make_column_chuncks<T: DataType>(
+    fn make_column_chuncks<T: CreateEncoder>(
         column_desc: ColumnDescPtr,
         encoding: Encoding,
         num_levels: usize,

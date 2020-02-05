@@ -24,7 +24,7 @@ use crate::column::page::{CompressedPage, Page, PageWriteSpec, PageWriter};
 use crate::compression::{create_codec, Codec};
 use crate::data_type::*;
 use crate::encodings::{
-    encoding::{get_encoder, DictEncoder, Encoder},
+    encoding::{get_encoder, CreateEncoder, DictEncoder, Encoder},
     levels::{max_buffer_size, LevelEncoder},
 };
 use crate::errors::{ParquetError, Result};
@@ -148,7 +148,7 @@ pub struct ColumnWriterImpl<T: DataType> {
     data_pages: VecDeque<CompressedPage>,
 }
 
-impl<T: DataType> ColumnWriterImpl<T> {
+impl<T: CreateEncoder> ColumnWriterImpl<T> {
     pub fn new(
         descr: ColumnDescPtr,
         props: WriterPropertiesPtr,
@@ -1440,7 +1440,7 @@ mod tests {
     /// Performs write-read roundtrip with randomly generated values and levels.
     /// `max_size` is maximum number of values or levels (if `max_def_level` > 0) to write
     /// for a column.
-    fn column_roundtrip_random<'a, T: DataType>(
+    fn column_roundtrip_random<'a, T: CreateEncoder>(
         file_name: &'a str,
         props: WriterProperties,
         max_size: usize,
@@ -1482,7 +1482,7 @@ mod tests {
     }
 
     /// Performs write-read roundtrip and asserts written values and levels.
-    fn column_roundtrip<'a, T: DataType>(
+    fn column_roundtrip<'a, T: CreateEncoder>(
         file_name: &'a str,
         props: WriterProperties,
         values: &[T::T],
@@ -1584,7 +1584,7 @@ mod tests {
 
     /// Performs write of provided values and returns column metadata of those values.
     /// Used to test encoding support for column writer.
-    fn column_write_and_get_metadata<T: DataType>(
+    fn column_write_and_get_metadata<T: CreateEncoder>(
         props: WriterProperties,
         values: &[T::T],
     ) -> ColumnChunkMetaData {
@@ -1599,7 +1599,7 @@ mod tests {
     // Function to use in tests for EncodingWriteSupport. This checks that dictionary
     // offset and encodings to make sure that column writer uses provided by trait
     // encodings.
-    fn check_encoding_write_support<T: DataType>(
+    fn check_encoding_write_support<T: CreateEncoder>(
         version: WriterVersion,
         dict_enabled: bool,
         data: &[T::T],

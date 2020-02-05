@@ -214,6 +214,7 @@ mod tests {
     use crate::arrow::converter::Int16Converter;
     use crate::arrow::record_reader::RecordReader;
     use crate::basic::Encoding;
+    use crate::encodings::encoding::CreateEncoder;
     use crate::schema::parser::parse_message_type;
     use crate::schema::types::SchemaDescriptor;
     use crate::util::test_common::page_util::InMemoryPageReader;
@@ -291,7 +292,7 @@ mod tests {
         assert!(array.equals(&PrimitiveArray::<Int32Type>::from(raw_data)));
     }
 
-    fn build_record_reader<T: DataType>(
+    fn build_record_reader<T: CreateEncoder>(
         message_type: &str,
         values: &[T::T],
         max_rep_level: i16,
